@@ -1,0 +1,589 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Garden Horizons",
+   LoadingTitle = "Đang tải Script...",
+   LoadingSubtitle = "by CC",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "SupportGameConfig", 
+      FileName = "MainConfig"
+   }
+})
+
+-- ==========================================
+-- BIẾN TOÀN CỤC
+-- ==========================================
+local sellPos = Vector3.new(148.26, 204.03, 673.12)
+local customStuds = 12
+local sellInterval = 60
+local autoReturnUI = false
+
+-- ==========================================
+-- HÀM HỖ TRỢ CLICK (ĐÃ FIX TỌA ĐỘ MỚI)
+-- ==========================================
+
+local function clickGardenUI()
+    local success, result = pcall(function()
+        local vim = game:GetService("VirtualInputManager")
+        local camera = workspace.CurrentCamera
+        local screenSize = camera.ViewportSize
+        
+        -- Tọa độ bạn đưa: {0.164417729, 0}, {0.982799768, 0}
+        -- X: 16.4% màn hình | Y: 98.2% màn hình (Gần sát mép dưới)
+        local targetX = screenSize.X * 0.164417729
+        local targetY = screenSize.Y * 0.982799768
+        
+        -- Giả lập click chuột trái
+        vim:SendMouseButtonEvent(targetX, targetY, 0, true, game, 1)
+        task.wait(0.1)
+        vim:SendMouseButtonEvent(targetX, targetY, 0, false, game, 1)
+        
+        return true
+    end)
+    
+    if not success then
+        -- Fallback method nếu cách trên không hoạt động
+        pcall(function()
+            local player = game.Players.LocalPlayer
+            local gardenButton = player:FindFirstChild("PlayerGui") 
+                and player.PlayerGui:FindFirstChild("Hud_UI") 
+                and player.PlayerGui.Hud_UI:FindFirstChild("TopButtons") 
+                and player.PlayerGui.Hud_UI.TopButtons:FindFirstChild("YourGarden")
+            
+            if gardenButton then
+                for _, connection in pairs(getconnections(gardenButton.MouseButton1Click)) do
+                    connection:Fire()
+                end
+            end
+        end)
+    end
+end
+
+-- Hàm thực hiện hành động Sell
+local function performSell()
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        local hrp = character.HumanoidRootPart
+        local currentPos = hrp.CFrame -- Lưu vị trí hiện tại
+
+        -- 1. Teleport đi bán
+        hrp.CFrame = CFrame.new(sellPos)
+        task.wait(0.7)
+        
+        -- 2. Gửi lệnh Sell
+        local args = {"SellAll"}
+        local sellSuccess = pcall(function()
+            game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("SellItems"):InvokeServer(unpack(args))
+        end)
+        
+        if sellSuccess then
+            Rayfield:Notify({Title = "System", Content = "Sold! Waiting 3s...", Duration = 2})
+        else
+            Rayfield:Notify({Title = "System", Content = "Sell failed!", Duration = 2})
+        end
+        
+        -- 3. Đợi 3 giây
+        task.wait(3) 
+        
+        -- 4. Click Garden UI để quay về
+        if autoReturnUI then
+            clickGardenUI()
+            Rayfield:Notify({Title = "System", Content = "Clicked Garden UI!", Duration = 2})
+        end
+        
+        -- Teleport về vị trí cũ (tùy chọn)
+        -- hrp.CFrame = currentPos
+    end
+end
+
+-- ==========================================
+-- VÒNG LẶP AUTO E (TỐI ƯU HƠN - 0.05S)
+-- ==========================================
+local autoE = false
+local eLoopRunning = false
+
+local function startELoop()
+    if eLoopRunning then return end
+    eLoopRunning = true
+    
+    task.spawn(function()
+        local vim = game:GetService("VirtualInputManager")
+        local player = game.Players.LocalPlayer
+        
+        while autoE do
+            -- Kiểm tra xem có prompt nào trong tầm không
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if hrp then
+                -- Tìm prompt gần nhất
+                for _, obj in pairs(game:GetDescendants()) do
+                    if obj:IsA("ProximityPrompt") and obj.Enabled and obj.ActionText == "Harvest" then
+                        local dist = (hrp.Position - obj.Parent.Position).Magnitude
+                        if dist <= obj.MaxActivationDistance then
+                            -- Quay mặt về phía prompt
+                            hrp.CFrame = CFrame.lookAt(hrp.Position, obj.Parent.Position)
+                            break
+                        end
+                    end
+                end
+            end
+            
+            -- Nhấn E với tốc độ 0.05s
+            vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.wait(0.02)
+            vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            
+            task.wait(0.05) -- Tốc độ 0.05s chính xác
+        end
+        
+        eLoopRunning = false
+    end)
+end
+
+-- ==========================================
+-- VÒNG LẶP BUFF RANGE (TỐI ƯU HƠN)
+-- ==========================================
+local buffRangeEnabled = false
+local rangeLoopRunning = false
+
+local function startRangeLoop()
+    if rangeLoopRunning then return end
+    rangeLoopRunning = true
+    
+    task.spawn(function()
+        while buffRangeEnabled do
+            for _, obj in pairs(game:GetDescendants()) do
+                if obj:IsA("ProximityPrompt") and obj.ActionText == "Harvest" then
+                    obj.MaxActivationDistance = customStuds
+                    -- Tắt Hold nếu có
+                    if obj.HoldDuration > 0 then
+                        obj.HoldDuration = 0
+                    end
+                end
+            end
+            task.wait(2) -- Giảm tần suất quét để đỡ lag
+        end
+        rangeLoopRunning = false
+    end)
+end
+
+-- ==========================================
+-- TAB 1: INFO
+-- ==========================================
+local InfoTab = Window:CreateTab("Info", 4483362458)
+InfoTab:CreateSection("Script Info")
+InfoTab:CreateLabel("Fix: Bottom-Left Coordinate Click")
+InfoTab:CreateLabel("Auto E with Face Tracking (0.05s)")
+InfoTab:CreateLabel("Buff Range + Instant Harvest")
+InfoTab:CreateLabel("Support Tab - Fix Lag & Tối ưu FPS")
+
+-- ==========================================
+-- TAB 2: MAIN
+-- ==========================================
+local MainTab = Window:CreateTab("Main", 4483362458)
+MainTab:CreateSection("Auto Controls")
+
+MainTab:CreateToggle({
+   Name = "Auto Press E (0.05s + Face Tracking)",
+   CurrentValue = false,
+   Flag = "ToggleE", 
+   Callback = function(Value)
+      autoE = Value
+      if Value then
+          startELoop()
+          Rayfield:Notify({Title = "Auto E", Content = "Đã bật - Tốc độ 0.05s + tự động quay mặt", Duration = 2})
+      else
+          Rayfield:Notify({Title = "Auto E", Content = "Đã tắt", Duration = 2})
+      end
+   end,
+})
+
+MainTab:CreateSection("Harvest Range")
+local rangeInput = MainTab:CreateInput({
+   Name = "Studs Amount",
+   CurrentValue = "12",
+   PlaceholderText = "Enter studs...",
+   Flag = "InputStuds",
+   Callback = function(Text)
+      customStuds = tonumber(Text) or 12
+      if buffRangeEnabled then
+          Rayfield:Notify({Title = "Range", Content = "Đã cập nhật: " .. customStuds .. " studs", Duration = 1.5})
+      end
+   end,
+})
+
+MainTab:CreateToggle({
+   Name = "Buff Range + Instant Harvest",
+   CurrentValue = false,
+   Flag = "ToggleHarvest", 
+   Callback = function(Value)
+      buffRangeEnabled = Value
+      if Value then
+          startRangeLoop()
+          Rayfield:Notify({Title = "Buff Range", Content = "Đã bật (Range: " .. customStuds .. " studs)", Duration = 2})
+      else
+          Rayfield:Notify({Title = "Buff Range", Content = "Đã tắt", Duration = 2})
+      end
+   end,
+})
+
+-- ==========================================
+-- TAB 3: FARM
+-- ==========================================
+local FarmTab = Window:CreateTab("Farm", 4483362458)
+
+local ReturnSection = FarmTab:CreateSection("Return Settings")
+FarmTab:CreateToggle({ 
+   Name = "Auto Click Garden UI (3s Delay)",
+   CurrentValue = false,
+   Flag = "ToggleReturnUI", 
+   Callback = function(Value)
+      autoReturnUI = Value
+   end,
+})
+
+-- Nút Test Click để bạn kiểm tra tọa độ ngay lập tức
+FarmTab:CreateButton({
+   Name = "Test Click Garden UI",
+   Callback = function()
+      clickGardenUI()
+      Rayfield:Notify({Title = "Test", Content = "Đã click Garden UI", Duration = 2})
+   end,
+})
+
+-- Nút Test Sell
+FarmTab:CreateButton({
+   Name = "Test Sell Now",
+   Callback = function()
+      performSell()
+   end,
+})
+
+local SellSection = FarmTab:CreateSection("Auto Sell Settings")
+FarmTab:CreateInput({
+   Name = "Sell Interval (Seconds)",
+   CurrentValue = "60",
+   PlaceholderText = "Enter seconds...",
+   Flag = "InputInterval",
+   Callback = function(Text)
+      sellInterval = tonumber(Text) or 60
+   end,
+})
+
+local autoSellTime = false
+FarmTab:CreateToggle({
+   Name = "Enable Sell Time",
+   CurrentValue = false,
+   Flag = "ToggleSellTime", 
+   Callback = function(Value)
+      autoSellTime = Value
+      task.spawn(function()
+         while autoSellTime do
+            task.wait(sellInterval)
+            if autoSellTime then performSell() end
+         end
+      end)
+   end,
+})
+
+local sellIfFull = false
+FarmTab:CreateToggle({
+   Name = "Sell If Full (290 items)",
+   CurrentValue = false,
+   Flag = "ToggleFull", 
+   Callback = function(Value)
+      sellIfFull = Value
+      task.spawn(function()
+         while sellIfFull do
+            local player = game.Players.LocalPlayer
+            local itemCount = #player.Backpack:GetChildren()
+            if player.Character and player.Character:FindFirstChildOfClass("Tool") then 
+                itemCount = itemCount + 1 
+            end
+            if itemCount >= 290 then
+                performSell()
+                task.wait(5)
+            end
+            task.wait(2)
+         end
+      end)
+   end,
+})
+
+-- Thêm nút Teleport về điểm bán
+FarmTab:CreateButton({
+   Name = "Teleport to Sell Point",
+   Callback = function()
+      local player = game.Players.LocalPlayer
+      local character = player.Character
+      if character and character:FindFirstChild("HumanoidRootPart") then
+         character.HumanoidRootPart.CFrame = CFrame.new(sellPos)
+         Rayfield:Notify({Title = "Teleport", Content = "Đã teleport đến điểm bán", Duration = 2})
+      end
+   end,
+})
+
+-- ==========================================
+-- TAB 4: SUPPORT (FIX LAG & TỐI ƯU)
+-- ==========================================
+local SupportTab = Window:CreateTab("Support", 4483362458)
+
+SupportTab:CreateSection("Tối Ưu Hóa & Fix Lag")
+
+-- Biến theo dõi trạng thái
+local lowGraphicsEnabled = false
+local removePartsEnabled = false
+local fpsBoostEnabled = false
+
+-- Hàm giảm graphics xuống mức thấp nhất
+local function enableLowGraphics()
+    pcall(function()
+        -- Giảm chất lượng đồ họa
+        local setting = settings()
+        setting.Rendering.QualityLevel = 1
+        
+        -- Tắt các hiệu ứng không cần thiết
+        game:GetService("Lighting").GlobalShadows = false
+        game:GetService("Lighting").FogEnd = 100000
+        game:GetService("Lighting").Brightness = 2
+        
+        -- Tắt các hiệu ứng nước
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Terrain") then
+                obj.WaterWaveSize = 0
+                obj.WaterWaveSpeed = 0
+                obj.WaterReflectance = 0
+                obj.WaterTransparency = 1
+            end
+        end
+        
+        Rayfield:Notify({Title = "Graphics", Content = "Đã giảm chất lượng đồ họa", Duration = 2})
+    end)
+end
+
+-- Hàm xóa các part không cần thiết
+local function removeLaggyParts()
+    pcall(function()
+        local removedCount = 0
+        
+        -- Xóa các particle emitter và các hiệu ứng
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+                obj.Enabled = false
+                removedCount = removedCount + 1
+            end
+            
+            -- Giảm detail của mesh
+            if obj:IsA("SpecialMesh") then
+                obj.TextureId = ""
+            end
+            
+            -- Xóa các decal không cần thiết
+            if obj:IsA("Decal") then
+                obj.Transparency = 1
+            end
+        end
+        
+        Rayfield:Notify({Title = "Remove Effects", Content = "Đã tắt " .. removedCount .. " hiệu ứng", Duration = 2})
+    end)
+end
+
+-- Hàm tối ưu toàn diện
+local function boostFPS()
+    pcall(function()
+        -- Tắt âm thanh
+        for _, obj in pairs(game:GetDescendants()) do
+            if obj:IsA("Sound") then
+                obj.Volume = 0
+                obj.Playing = false
+            end
+        end
+        
+        -- Giảm draw distance
+        local camera = workspace.CurrentCamera
+        if camera then
+            camera.MaxAxis = 500
+        end
+        
+        -- Xóa các phần tử GUI không cần thiết
+        local player = game.Players.LocalPlayer
+        if player and player.PlayerGui then
+            for _, gui in pairs(player.PlayerGui:GetChildren()) do
+                if gui:IsA("ScreenGui") and gui.Name ~= "Hud_UI" then
+                    gui.Enabled = false
+                end
+            end
+        end
+        
+        -- Tối ưu hóa workspace
+        workspace.DescendantAdded:Connect(function(descendant)
+            if fpsBoostEnabled then
+                if descendant:IsA("ParticleEmitter") or descendant:IsA("Trail") then
+                    descendant.Enabled = false
+                end
+            end
+        end)
+        
+        Rayfield:Notify({Title = "FPS Boost", Content = "Đã tối ưu FPS, khởi động lại nếu cần", Duration = 3})
+    end)
+end
+
+-- Các nút chức năng trong Support Tab
+SupportTab:CreateButton({
+   Name = "🔧 Giảm Graphics (Low Quality)",
+   Callback = function()
+      enableLowGraphics()
+   end,
+})
+
+SupportTab:CreateButton({
+   Name = "🧹 Dọn Dẹp Hiệu Ứng (Remove Particles)",
+   Callback = function()
+      removeLaggyParts()
+   end,
+})
+
+SupportTab:CreateButton({
+   Name = "⚡ Boost FPS (Tối ưu toàn diện)",
+   Callback = function()
+      fpsBoostEnabled = true
+      boostFPS()
+   end,
+})
+
+SupportTab:CreateSection("Tối Ưu Part & Mesh")
+
+-- Nút chuyển đổi part lớn thành part nhỏ
+SupportTab:CreateButton({
+   Name = "🔄 Chuyển Part Lớn → Part Nhỏ",
+   Callback = function()
+      pcall(function()
+          local converted = 0
+          for _, obj in pairs(workspace:GetDescendants()) do
+              if obj:IsA("Part") or obj:IsA("MeshPart") then
+                  local size = obj.Size
+                  if size.X > 10 or size.Y > 10 or size.Z > 10 then
+                      -- Chia nhỏ part lớn (giả lập bằng cách giảm size và transparency)
+                      obj.Transparency = 0.5
+                      obj.Material = Enum.Material.SmoothPlastic
+                      converted = converted + 1
+                  end
+              end
+          end
+          Rayfield:Notify({Title = "Convert Parts", Content = "Đã xử lý " .. converted .. " part lớn", Duration = 2})
+      end)
+   end,
+})
+
+-- Nút xóa mesh phức tạp
+SupportTab:CreateButton({
+   Name = "🗑️ Xóa Mesh Phức Tạp",
+   Callback = function()
+      pcall(function()
+          local removed = 0
+          for _, obj in pairs(workspace:GetDescendants()) do
+              if obj:IsA("MeshPart") and obj.MeshId ~= "" then
+                  obj.Transparency = 1
+                  removed = removed + 1
+              end
+          end
+          Rayfield:Notify({Title = "Remove Mesh", Content = "Đã ẩn " .. removed .. " mesh phức tạp", Duration = 2})
+      end)
+   end,
+})
+
+SupportTab:CreateSection("Network Tối Ưu")
+
+-- Nút giảm streaming
+SupportTab:CreateButton({
+   Name = "📡 Tối Ưu Network",
+   Callback = function()
+      pcall(function()
+          local player = game.Players.LocalPlayer
+          if player then
+              -- Giảm tải network
+              settings().Network.IncomingReplicationLag = 0
+              
+              -- Tối ưu hóa streaming
+              player.ReplicationFocus = workspace.CurrentCamera
+              
+              -- Giới hạn hiển thị
+              workspace.StreamingEnabled = true
+              workspace.StreamingMinRadius = 100
+              workspace.StreamingTargetRadius = 200
+          end
+          Rayfield:Notify({Title = "Network", Content = "Đã tối ưu streaming", Duration = 2})
+      end)
+   end,
+})
+
+SupportTab:CreateSection("Reset & Khôi Phục")
+
+-- Nút reset mọi thứ
+SupportTab:CreateButton({
+   Name = "🔄 Reset Tất Cả",
+   Callback = function()
+      pcall(function()
+          -- Bật lại các hiệu ứng
+          for _, obj in pairs(workspace:GetDescendants()) do
+              if obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                  obj.Enabled = true
+              end
+          end
+          
+          -- Bật lại đồ họa
+          local setting = settings()
+          setting.Rendering.QualityLevel = 21
+          
+          game:GetService("Lighting").GlobalShadows = true
+          
+          -- Bật lại sound
+          for _, obj in pairs(game:GetDescendants()) do
+              if obj:IsA("Sound") then
+                  obj.Volume = 0.5
+              end
+          end
+          
+          fpsBoostEnabled = false
+          Rayfield:Notify({Title = "Reset", Content = "Đã reset tất cả cài đặt", Duration = 2})
+      end)
+   end,
+})
+
+-- Nút kiểm tra FPS
+SupportTab:CreateButton({
+   Name = "📊 Kiểm Tra FPS",
+   Callback = function()
+      local startTime = tick()
+      local frameCount = 0
+      
+      local connection = game:GetService("RunService").RenderStepped:Connect(function()
+          frameCount = frameCount + 1
+      end)
+      
+      task.wait(1)
+      connection:Disconnect()
+      
+      local fps = math.floor(frameCount / (tick() - startTime))
+      Rayfield:Notify({Title = "FPS Counter", Content = "FPS hiện tại: " .. fps, Duration = 3})
+   end,
+})
+
+-- ==========================================
+-- LOAD CONFIG
+-- ==========================================
+Rayfield:LoadConfiguration()
+
+-- Load cấu hình sau khi khởi tạo
+task.spawn(function()
+    task.wait(1.5)
+    if Rayfield.Flags["InputStuds"] then 
+        customStuds = tonumber(Rayfield.Flags["InputStuds"].CurrentValue) or 12 
+    end
+    if Rayfield.Flags["InputInterval"] then 
+        sellInterval = tonumber(Rayfield.Flags["InputInterval"].CurrentValue) or 60 
+    end
+end)
