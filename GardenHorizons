@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Garden Horizons | Premium Edition",
+   Name = "Garden Horizons",
    LoadingTitle = "Đang tải Script...",
    LoadingSubtitle = "by CC",
    ConfigurationSaving = {
@@ -21,8 +21,9 @@ local DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1468900540791656591/8U
 
 local autoE = false
 local buffRangeEnabled = false
+local isBuyingSeeds = false
 local isSelling = false 
-local constantZoom = false
+local constantZoom = false -- Biến cho Zoom liên tục
 
 -- ==========================================
 -- HÀM HỖ TRỢ
@@ -44,22 +45,22 @@ local function clickGardenUI()
 end
 
 local function performSell()
-    if isSelling then return end
+    if isBuyingSeeds then return end
     
     isSelling = true 
     local character = game.Players.LocalPlayer.Character
     if character and character:FindFirstChild("HumanoidRootPart") then
         local hrp = character.HumanoidRootPart
         hrp.CFrame = CFrame.new(sellPos)
-        task.wait(0.5)
+        task.wait(0.8)
         pcall(function() 
             game:GetService("ReplicatedStorage").RemoteEvents.SellItems:InvokeServer("SellAll") 
         end)
-        Rayfield:Notify({Title = "Hệ Thống", Content = "Đã bán xong! Đang quay lại vườn...", Duration = 1.5})
-        task.wait(1) 
+        Rayfield:Notify({Title = "Hệ Thống", Content = "Đã bán xong! Đang quay lại vườn...", Duration = 2})
+        task.wait(1.5) 
         if autoReturnUI then 
             clickGardenUI() 
-            task.wait(1)
+            task.wait(1.5)
         end
     end
     isSelling = false 
@@ -77,6 +78,7 @@ task.spawn(function()
                 player.CameraMinZoomDistance = 26
             end)
         else
+            -- Trả lại mặc định khi tắt
             pcall(function()
                 player.CameraMaxZoomDistance = 100
                 player.CameraMinZoomDistance = 0.5
@@ -87,98 +89,45 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- AUTO THU HOẠCH SIÊU NHANH - ÍT LAG NHẤT
+-- AUTO TP + ĂN E SIÊU NHANH (0.05S)
 -- ==========================================
 
--- Cache để giảm tra cứu
-local players = game:GetService("Players")
-local vim = game:GetService("VirtualInputManager")
-local replicated = game:GetService("ReplicatedStorage")
-
--- Danh sách prompt đã xử lý để tránh trùng lặp
-local processedPrompts = {}
-
 task.spawn(function()
-    local player = players.LocalPlayer
+    local vim = game:GetService("VirtualInputManager")
+    local player = game.Players.LocalPlayer
     
     while true do
-        if autoE and not isSelling then
+        if autoE and not isBuyingSeeds and not isSelling then
             local character = player.Character
             local hrp = character and character:FindFirstChild("HumanoidRootPart")
-            
             if hrp then
-                -- Dọn cache cũ
-                if #processedPrompts > 50 then
-                    processedPrompts = {}
-                end
-                
-                -- Tìm tất cả prompt Harvest trong tầm
+                local target = nil
                 for _, obj in pairs(game:GetDescendants()) do
                     if obj:IsA("ProximityPrompt") and obj.Enabled and obj.ActionText == "Harvest" then
-                        -- Kiểm tra khoảng cách
-                        local dist = (hrp.Position - obj.Parent.Position).Magnitude
-                        if dist <= (obj.MaxActivationDistance or customStuds) then
-                            -- Tránh xử lý lại prompt cũ
-                            if not processedPrompts[obj] then
-                                processedPrompts[obj] = true
-                                
-                                -- Teleport nhanh đến cây
-                                hrp.CFrame = CFrame.new(obj.Parent.Position + Vector3.new(0, 2, 0))
-                                task.wait(0.01)
-                                
-                                -- Nhấn E siêu nhanh
-                                vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                                task.wait(0.01)
-                                vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                                
-                                -- Kích hoạt prompt trực tiếp (dự phòng)
-                                pcall(function()
-                                    obj:InputHoldBegin()
-                                    task.wait(0.01)
-                                    obj:InputHoldEnd()
-                                end)
-                            end
-                        end
+                        target = obj
+                        break
                     end
                 end
-            end
-        end
-        task.wait(0.03) -- Tốc độ siêu nhanh 0.03s
-    end
-end)
-
--- ==========================================
--- BUFF RANGE TỐI ƯU
--- ==========================================
-task.spawn(function()
-    while true do
-        if buffRangeEnabled then
-            for _, obj in pairs(game:GetDescendants()) do
-                if obj:IsA("ProximityPrompt") then
-                    obj.MaxActivationDistance = customStuds
-                    obj.HoldDuration = 0
-                    obj.RequiresLineOfSight = false
+                if target and target.Parent then
+                    local targetPos = target.Parent.CFrame * CFrame.new(0, 2, 0)
+                    repeat
+                        if not autoE or isBuyingSeeds or isSelling then break end
+                        hrp.CFrame = targetPos
+                        pcall(function()
+                            target:InputHoldBegin()
+                            vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.02)
+                            vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            target:InputHoldEnd()
+                        end)
+                        task.wait(0.03) 
+                        local invCount = #player.Backpack:GetChildren()
+                        if invCount >= 290 then break end
+                    until not target or not target.Enabled or target.ActionText ~= "Harvest" or not target.Parent
                 end
             end
         end
-        task.wait(2) -- Giảm tần suất để đỡ lag
-    end
-end)
-
--- ==========================================
--- KIỂM TRA TÚI ĐẦY VÀ BÁN
--- ==========================================
-task.spawn(function()
-    local player = players.LocalPlayer
-    
-    while true do
-        if _G.SellWhenFull and not isSelling and not autoE then
-            local invCount = #player.Backpack:GetChildren()
-            if invCount >= 290 then
-                performSell()
-            end
-        end
-        task.wait(1)
+        task.wait(0.1)
     end
 end)
 
@@ -190,15 +139,10 @@ local MainTab = Window:CreateTab("Chính", 4483362458)
 MainTab:CreateSection("Cài Đặt Farm")
 
 MainTab:CreateToggle({
-   Name = "⚡ AUTO THU HOẠCH SIÊU NHANH (0.03s)",
+   Name = "⚡ AUTO TP + ĂN E (0.05s)",
    CurrentValue = false,
    Flag = "ToggleE", 
-   Callback = function(Value) 
-      autoE = Value
-      if Value then
-          Rayfield:Notify({Title = "Auto Farm", Content = "Đã bật - Tốc độ 0.03s, ít lag", Duration = 1.5})
-      end
-   end,
+   Callback = function(Value) autoE = Value end,
 })
 
 MainTab:CreateToggle({
@@ -213,44 +157,36 @@ MainTab:CreateToggle({
    end,
 })
 
-MainTab:CreateSection("Phạm Vi Thu Hoạch")
-
 MainTab:CreateInput({
-   Name = "Khoảng cách (Studs)",
+   Name = "Khoảng cách Buff (Studs)",
    CurrentValue = "12",
    PlaceholderText = "Nhập số...", 
    Flag = "RangeInput",
-   Callback = function(Text) 
-      customStuds = tonumber(Text) or 12 
-   end,
+   Callback = function(Text) customStuds = tonumber(Text) or 12 end,
 })
 
 MainTab:CreateToggle({
    Name = "Bật Buff Range",
    CurrentValue = false,
    Flag = "ToggleRange", 
-   Callback = function(Value) 
-      buffRangeEnabled = Value 
-   end,
+   Callback = function(Value) buffRangeEnabled = Value end,
 })
 
--- Nút test tốc độ
-MainTab:CreateButton({
-   Name = "⚡ TEST TỐC ĐỘ FARM",
-   Callback = function()
-      local start = tick()
-      local count = 0
-      for i = 1, 100 do
-          count = count + 1
-      end
-      local time = (tick() - start) * 1000
-      Rayfield:Notify({
-          Title = "Test tốc độ", 
-          Content = string.format("Xử lý 100 lần trong %.2f ms", time), 
-          Duration = 2
-      })
-   end,
-})
+-- Buff range loop
+task.spawn(function()
+    while true do
+        if buffRangeEnabled then
+            for _, obj in pairs(game:GetDescendants()) do
+                if obj:IsA("ProximityPrompt") and obj.ActionText == "Harvest" then
+                    obj.MaxActivationDistance = customStuds
+                    obj.HoldDuration = 0
+                    obj.RequiresLineOfSight = false
+                end
+            end
+        end
+        task.wait(1)
+    end
+end)
 
 local FarmTab = Window:CreateTab("Auto Farm", 4483362458)
 FarmTab:CreateSection("Tự Động Bán")
@@ -261,6 +197,15 @@ FarmTab:CreateToggle({
    Flag = "SellWhenFull",
    Callback = function(Value)
       _G.SellWhenFull = Value
+      task.spawn(function()
+         while _G.SellWhenFull do
+            local invCount = #game.Players.LocalPlayer.Backpack:GetChildren()
+            if invCount >= 290 and not isSelling and not isBuyingSeeds then
+               performSell()
+            end
+            task.wait(2)
+         end
+      end)
    end,
 })
 
@@ -268,16 +213,26 @@ FarmTab:CreateToggle({
    Name = "Tự TP lại vườn sau khi bán",
    CurrentValue = false,
    Flag = "AutoReturn", 
-   Callback = function(Value) 
-      autoReturnUI = Value 
-   end,
+   Callback = function(Value) autoReturnUI = Value end,
 })
 
--- Nút bán thủ công
-FarmTab:CreateButton({
-   Name = "💰 Bán Ngay",
+local SeedTab = Window:CreateTab("Seed", 4483362458)
+SeedTab:CreateButton({
+   Name = "🛒 Mua tất cả Seed",
    Callback = function()
-      performSell()
+      isBuyingSeeds = true
+      task.spawn(function()
+         local seeds = {"Carrot Seed", "Corn Seed", "Onion Seed", "Strawberry Seed", "Mushroom Seed", "Beetroot Seed", "Tomato Seed", "Apple Seed", "Rose Seed", "Wheat Seed", "Banana Seed", "Plum Seed", "Potato Seed", "Cabbage Seed", "Cherry Seed"}
+         for _, s in pairs(seeds) do
+            local character = game.Players.LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                character.HumanoidRootPart.CFrame = CFrame.new(176.7, 201, 672)
+            end
+            task.wait(0.3)
+            pcall(function() game:GetService("ReplicatedStorage").RemoteEvents.PurchaseShopItem:InvokeServer("SeedShop", s) end)
+         end
+         isBuyingSeeds = false
+      end)
    end,
 })
 
