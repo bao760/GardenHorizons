@@ -1,7 +1,7 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Garden Horizons | Premium Edition",
+   Name = "Garden Horizons 1",
    LoadingTitle = "Đang tải Script...",
    LoadingSubtitle = "by CC",
    ConfigurationSaving = {
