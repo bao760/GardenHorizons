@@ -1,95 +1,95 @@
-local TweenService = game:GetService("TweenService")
+--[[
+    AUTO EXEC TROLL SCRIPT
+    Dành cho các loại Executor (Fluxus, Delta, Wave, v.v.)
+]]
+
+local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
-local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- 1. Tạo Giao diện Chính
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FinalTrollGui"
-screenGui.IgnoreGuiInset = true -- Che cả thanh công cụ
-screenGui.Parent = playerGui
+-- Hàm bảo vệ GUI (Nếu nạn nhân reset nhân vật, GUI vẫn không mất)
+local function CreateTrollGui()
+    -- Xóa bản cũ nếu có
+    if playerGui:FindFirstChild("GeminiTroll") then
+        playerGui.GeminiTroll:Destroy()
+    end
 
--- Màn hình đen kịt
-local blackFrame = Instance.new("Frame")
-blackFrame.Size = UDim2.new(1, 0, 1, 0)
-blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-blackFrame.BackgroundTransparency = 1
-blackFrame.ZIndex = 1
-blackFrame.Parent = screenGui
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "GeminiTroll"
+    screenGui.IgnoreGuiInset = true
+    screenGui.ResetOnSpawn = false -- Cốt lõi của sự lì lợm
+    screenGui.DisplayOrder = 999999 -- Luôn đè lên trên mọi thứ khác
+    screenGui.Parent = playerGui
 
--- Khung chứa trung tâm
-local container = Instance.new("Frame")
-container.Size = UDim2.new(0.8, 0, 0.6, 0)
-container.Position = UDim2.new(0.1, 0, 0.2, 0)
-container.BackgroundTransparency = 1
-container.ZIndex = 2
-container.Parent = screenGui
+    -- Màn hình đen
+    local blackFrame = Instance.new("Frame")
+    blackFrame.Size = UDim2.new(1, 0, 1, 0)
+    blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+    blackFrame.BackgroundTransparency = 0 -- Hiện ngay lập tức
+    blackFrame.ZIndex = 1
+    blackFrame.Parent = screenGui
 
--- Hình con chó (To và chính giữa phía trên)
-local dogIcon = Instance.new("ImageLabel")
-dogIcon.Size = UDim2.new(0, 200, 0, 200)
-dogIcon.Position = UDim2.new(0.5, -100, 0, -50) -- Nằm trên dòng chữ
-dogIcon.Image = "rbxassetid://182607351"
-dogIcon.BackgroundTransparency = 1
-dogIcon.Visible = false
-dogIcon.Parent = container
+    -- Khung chứa
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0.9, 0, 0.7, 0)
+    container.Position = UDim2.new(0.05, 0, 0.15, 0)
+    container.BackgroundTransparency = 1
+    container.ZIndex = 2
+    container.Parent = screenGui
 
--- Dòng chữ chửi (Đã cho xuống dòng)
-local textLabel = Instance.new("TextLabel")
-textLabel.Size = UDim2.new(1, 0, 1, 0)
-textLabel.Position = UDim2.new(0, 0, 0.2, 0)
-textLabel.BackgroundTransparency = 1
-textLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-textLabel.TextScaled = true
-textLabel.Font = Enum.Font.LuckiestGuy
-textLabel.TextWrapped = true -- Cho phép tự động xuống dòng
-textLabel.Text = "Chuẩn bị..."
-textLabel.Parent = container
+    -- Hình con chó
+    local dogIcon = Instance.new("ImageLabel")
+    dogIcon.Size = UDim2.new(0, 250, 0, 250)
+    dogIcon.Position = UDim2.new(0.5, -125, 0, -30)
+    dogIcon.Image = "rbxassetid://182607351"
+    dogIcon.BackgroundTransparency = 1
+    dogIcon.Parent = container
 
--- 2. Hiệu ứng Rung Lắc & Chớp Màu
-local function extremeEffects()
-    task.spawn(function()
-        while screenGui.Parent do
-            -- Rung toàn bộ Container
-            container.Position = UDim2.new(0.1, math.random(-15, 15), 0.2, math.random(-15, 15))
-            
-            -- Chớp màu đỏ/trắng/vàng cho thêm cay
-            local colors = {Color3.new(1, 0, 0), Color3.new(1, 1, 1), Color3.new(1, 1, 0)}
-            textLabel.TextColor3 = colors[math.random(1, #colors)]
-            
-            task.wait(0.03)
+    -- Chữ chửi
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 0.8, 0)
+    textLabel.Position = UDim2.new(0, 0, 0.2, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.new(1, 0, 0)
+    textLabel.TextScaled = true
+    textLabel.Font = Enum.Font.LuckiestGuy
+    textLabel.TextWrapped = true
+    textLabel.Text = "Đĩ mẹ mày thằng chó\ntao cay mày lâu lắm r đó\n" .. player.Name .. "\nLÊU LÊU !! | By Gemini :))"
+    textLabel.Parent = container
+
+    -- Hiệu ứng rung giật cực độ (Dùng RenderStepped cho mượt)
+    local shakeConnection
+    shakeConnection = RunService.RenderStepped:Connect(function()
+        if screenGui.Parent then
+            container.Position = UDim2.new(0.05, math.random(-30, 30), 0.15, math.random(-30, 30))
+            container.Rotation = math.random(-10, 10)
+            textLabel.TextColor3 = Color3.fromHSV(tick() % 1, 1, 1) -- Màu Rainbow cực gắt
+        else
+            shakeConnection:Disconnect()
         end
+    end)
+
+    -- Chặn ESC (Auto Rejoin)
+    local escConnection
+    escConnection = UserInputService.InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.Escape then
+            textLabel.Text = "MUỐN CHẠY À?\nKHÔNG CÓ CỬA ĐÂU CON CHÓ!"
+            task.wait(0.3)
+            TeleportService:Teleport(game.PlaceId, player)
+        end
+    end)
+
+    -- Tự hủy sau 8 giây
+    task.delay(8, function()
+        if screenGui then screenGui:Destroy() end
+        if escConnection then escConnection:Disconnect() end
     end)
 end
 
--- 3. Chặn đường thoát (ESC = Rejoin)
-UserInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Escape then
-        textLabel.Text = "MUỐN CHẠY À?\nKHÔNG CÓ CỬA ĐÂU CON CHÓ!"
-        task.wait(0.2)
-        TeleportService:Teleport(game.PlaceId, player)
-    end
-end)
-
--- 4. Kịch bản chạy
-task.spawn(function()
-    -- Đếm ngược 2 giây
-    for i = 2, 1, -1 do
-        textLabel.Text = "KÍCH HOẠT SAU\n" .. i
-        task.wait(1)
-    end
-    
-    -- HIỆN NỘI DUNG CHÍNH (Dùng \n để xuống dòng thủ công cho đẹp)
-    blackFrame.BackgroundTransparency = 0
-    dogIcon.Visible = true
-    textLabel.Text = "Đĩ mẹ mày thằng chó\ntao cay mày lâu lắm r đó\n" .. player.Name .. "\nLÊU LÊU !! | By Gemini :))"
-    
-    extremeEffects()
-    
-    -- Sau 8 giây thì xóa GUI
-    task.wait(8)
-    screenGui:Destroy()
-end)
+-- Tự động thực thi ngay khi nhấn Execute
+print("Auto Executed: Troll Script Activated!")
+CreateTrollGui()
