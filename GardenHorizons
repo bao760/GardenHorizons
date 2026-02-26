@@ -1,95 +1,101 @@
---[[
-    AUTO EXEC TROLL SCRIPT
-    Dành cho các loại Executor (Fluxus, Delta, Wave, v.v.)
-]]
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+local Window = Rayfield:CreateWindow({
+   Name = "SDVT ONLY",
+   LoadingTitle = "SDVT Ultra Fast Harvest",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "SDVT_1chap", -- Folder lưu trữ
+      FileName = "horizon_1!AFK"   -- File lưu cấu hình
+   },
+   KeySystem = false -- Đã loại bỏ Key theo yêu cầu
+})
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+-- Biến điều khiển
+_G.BuffRangeValue = 10
+_G.BuffRangeEnabled = false
+_G.AutoHarvest = false
 
--- Hàm bảo vệ GUI (Nếu nạn nhân reset nhân vật, GUI vẫn không mất)
-local function CreateTrollGui()
-    -- Xóa bản cũ nếu có
-    if playerGui:FindFirstChild("GeminiTroll") then
-        playerGui.GeminiTroll:Destroy()
-    end
+-- TAB 1: INFO
+local Tab1 = Window:CreateTab("Info", 4483362458)
+Tab1:CreateParagraph({Title = "SDVT ONLY", Content = "Menu tự động Load cấu hình từ file: horizon_1!AFK\nWebhook hiện tại: https://discord.com/api/webhooks/1468900540791656591/8UkJWiriO0gmXAsoW_N2VxlH2BR4KyWjxovWaCGGhyAwFyNCAGslkrwXgES_Joi-mIar"})
 
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "GeminiTroll"
-    screenGui.IgnoreGuiInset = true
-    screenGui.ResetOnSpawn = false -- Cốt lõi của sự lì lợm
-    screenGui.DisplayOrder = 999999 -- Luôn đè lên trên mọi thứ khác
-    screenGui.Parent = playerGui
+-- TAB 2: MAIN
+local Tab2 = Window:CreateTab("Main", 4483362458)
 
-    -- Màn hình đen
-    local blackFrame = Instance.new("Frame")
-    blackFrame.Size = UDim2.new(1, 0, 1, 0)
-    blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
-    blackFrame.BackgroundTransparency = 0 -- Hiện ngay lập tức
-    blackFrame.ZIndex = 1
-    blackFrame.Parent = screenGui
+Tab2:CreateSection("Rage Buff Range")
 
-    -- Khung chứa
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(0.9, 0, 0.7, 0)
-    container.Position = UDim2.new(0.05, 0, 0.15, 0)
-    container.BackgroundTransparency = 1
-    container.ZIndex = 2
-    container.Parent = screenGui
+-- Khung nhập Range (Tự động lưu vào Config)
+Tab2:CreateInput({
+   Name = "Range Value",
+   PlaceholderText = "Nhập số (Ví dụ: 20)",
+   RemoveTextAfterFocusLost = false,
+   Flag = "RangeInput",
+   Callback = function(Text)
+      _G.BuffRangeValue = tonumber(Text) or 10
+   end,
+})
 
-    -- Hình con chó
-    local dogIcon = Instance.new("ImageLabel")
-    dogIcon.Size = UDim2.new(0, 250, 0, 250)
-    dogIcon.Position = UDim2.new(0.5, -125, 0, -30)
-    dogIcon.Image = "rbxassetid://182607351"
-    dogIcon.BackgroundTransparency = 1
-    dogIcon.Parent = container
+-- Nút Tick Buff Range & Biến Hold thành Click
+Tab2:CreateToggle({
+   Name = "Buff Range (Harvest Only)",
+   CurrentValue = false,
+   Flag = "BuffRangeToggle",
+   Callback = function(Value)
+      _G.BuffRangeEnabled = Value
+      task.spawn(function()
+         while _G.BuffRangeEnabled do
+            for _, v in pairs(game:GetService("Workspace"):GetDescendants()) do
+               if v:IsA("ProximityPrompt") and (v.ObjectText == "Harvest" or v.ActionText == "Harvest") then
+                  v.MaxActivationDistance = _G.BuffRangeValue
+                  v.HoldDuration = 0 -- Biến Hold thành Click ngay lập tức
+               end
+            end
+            task.wait(0.5) -- Quét nhanh để áp dụng cho cây mới mọc
+         end
+      end)
+   end,
+})
 
-    -- Chữ chửi
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, 0, 0.8, 0)
-    textLabel.Position = UDim2.new(0, 0, 0.2, 0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.new(1, 0, 0)
-    textLabel.TextScaled = true
-    textLabel.Font = Enum.Font.LuckiestGuy
-    textLabel.TextWrapped = true
-    textLabel.Text = "Đĩ mẹ mày thằng chó\ntao cay mày lâu lắm r đó\n" .. player.Name .. "\nLÊU LÊU !! | By Gemini :))"
-    textLabel.Parent = container
+Tab2:CreateSection("Auto Actions")
 
-    -- Hiệu ứng rung giật cực độ (Dùng RenderStepped cho mượt)
-    local shakeConnection
-    shakeConnection = RunService.RenderStepped:Connect(function()
-        if screenGui.Parent then
-            container.Position = UDim2.new(0.05, math.random(-30, 30), 0.15, math.random(-30, 30))
-            container.Rotation = math.random(-10, 10)
-            textLabel.TextColor3 = Color3.fromHSV(tick() % 1, 1, 1) -- Màu Rainbow cực gắt
-        else
-            shakeConnection:Disconnect()
-        end
-    end)
+-- Nút Auto TP và Click E Siêu Tốc
+Tab2:CreateToggle({
+   Name = "Auto TP & Ultra Fast E",
+   CurrentValue = false,
+   Flag = "AutoEToggle",
+   Callback = function(Value)
+      _G.AutoHarvest = Value
+      
+      task.spawn(function()
+         local player = game.Players.LocalPlayer
+         while _G.AutoHarvest do
+            local found = false
+            for _, obj in pairs(game:GetService("Workspace"):GetDescendants()) do
+               if not _G.AutoHarvest then break end
+               
+               -- Kiểm tra đúng vật phẩm Harvest
+               if obj:IsA("ProximityPrompt") and (obj.ObjectText == "Harvest" or obj.ActionText == "Harvest") then
+                  local parentPart = obj.Parent
+                  if parentPart and parentPart:IsA("BasePart") then
+                     found = true
+                     -- Dịch chuyển nhân vật đến vị trí Harvest
+                     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        player.Character.HumanoidRootPart.CFrame = parentPart.CFrame * CFrame.new(0, 2, 0)
+                     end
+                     
+                     -- Kích hoạt nút E ngay lập tức (Xóa bỏ delay nhấn giữ)
+                     fireproximityprompt(obj)
+                     task.wait() -- Delay cực nhỏ để đảm bảo nhận lệnh
+                  end
+               end
+            end
+            if not found then task.wait(0.1) end
+         end
+      end)
+   end,
+})
 
-    -- Chặn ESC (Auto Rejoin)
-    local escConnection
-    escConnection = UserInputService.InputBegan:Connect(function(input)
-        if input.KeyCode == Enum.KeyCode.Escape then
-            textLabel.Text = "MUỐN CHẠY À?\nKHÔNG CÓ CỬA ĐÂU CON CHÓ!"
-            task.wait(0.3)
-            TeleportService:Teleport(game.PlaceId, player)
-        end
-    end)
-
-    -- Tự hủy sau 8 giây
-    task.delay(8, function()
-        if screenGui then screenGui:Destroy() end
-        if escConnection then escConnection:Disconnect() end
-    end)
-end
-
--- Tự động thực thi ngay khi nhấn Execute
-print("Auto Executed: Troll Script Activated!")
-CreateTrollGui()
+-- Tự động tải lại các thiết lập đã lưu từ trước
+Rayfield:LoadConfiguration()
