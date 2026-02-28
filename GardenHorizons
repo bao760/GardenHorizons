@@ -1,101 +1,72 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SDVT ONLY",
-   LoadingTitle = "SDVT Ultra Fast Harvest",
+   Name = "SCJ Horizons V2.1",
+   LoadingTitle = "Đang tự động tải cài đặt...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = "SDVT_1chap", -- Folder lưu trữ
-      FileName = "horizon_1!AFK"   -- File lưu cấu hình
+      FolderName = "SCJ_Horizons_Configs", 
+      FileName = "MainConfig"
    },
-   KeySystem = false -- Đã loại bỏ Key theo yêu cầu
+   KeySystem = false, 
 })
 
--- Biến điều khiển
-_G.BuffRangeValue = 10
-_G.BuffRangeEnabled = false
-_G.AutoHarvest = false
-
--- TAB 1: INFO
+-- Tab 1: Info
 local Tab1 = Window:CreateTab("Info", 4483362458)
-Tab1:CreateParagraph({Title = "SDVT ONLY", Content = "Menu tự động Load cấu hình từ file: horizon_1!AFK\nWebhook hiện tại: https://discord.com/api/webhooks/1468900540791656591/8UkJWiriO0gmXAsoW_N2VxlH2BR4KyWjxovWaCGGhyAwFyNCAGslkrwXgES_Joi-mIar"})
+Tab1:CreateSection("Thông tin Script")
+Tab1:CreateLabel("Tên: SCJ Horizons V2.1")
+Tab1:CreateLabel("Phiên bản: 2.1")
+Tab1:CreateParagraph({Title = "Trạng thái", Content = "Script sẽ tự động ghi nhớ và tải lại các thiết lập của bạn."})
 
--- TAB 2: MAIN
+-- Tab 2: Main Functions
 local Tab2 = Window:CreateTab("Main", 4483362458)
 
-Tab2:CreateSection("Rage Buff Range")
+local _G = { AutoE = false }
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Player = game:GetService("Players").LocalPlayer
 
--- Khung nhập Range (Tự động lưu vào Config)
-Tab2:CreateInput({
-   Name = "Range Value",
-   PlaceholderText = "Nhập số (Ví dụ: 20)",
-   RemoveTextAfterFocusLost = false,
-   Flag = "RangeInput",
-   Callback = function(Text)
-      _G.BuffRangeValue = tonumber(Text) or 10
-   end,
-})
+Tab2:CreateSection("Chức năng chính")
 
--- Nút Tick Buff Range & Biến Hold thành Click
 Tab2:CreateToggle({
-   Name = "Buff Range (Harvest Only)",
+   Name = "Auto E & Max Zoom Out",
    CurrentValue = false,
-   Flag = "BuffRangeToggle",
+   Flag = "MainToggle_Config", 
    Callback = function(Value)
-      _G.BuffRangeEnabled = Value
-      task.spawn(function()
-         while _G.BuffRangeEnabled do
-            for _, v in pairs(game:GetService("Workspace"):GetDescendants()) do
-               if v:IsA("ProximityPrompt") and (v.ObjectText == "Harvest" or v.ActionText == "Harvest") then
-                  v.MaxActivationDistance = _G.BuffRangeValue
-                  v.HoldDuration = 0 -- Biến Hold thành Click ngay lập tức
-               end
-            end
-            task.wait(0.5) -- Quét nhanh để áp dụng cho cây mới mọc
-         end
-      end)
-   end,
-})
-
-Tab2:CreateSection("Auto Actions")
-
--- Nút Auto TP và Click E Siêu Tốc
-Tab2:CreateToggle({
-   Name = "Auto TP & Ultra Fast E",
-   CurrentValue = false,
-   Flag = "AutoEToggle",
-   Callback = function(Value)
-      _G.AutoHarvest = Value
+      _G.AutoE = Value
       
-      task.spawn(function()
-         local player = game.Players.LocalPlayer
-         while _G.AutoHarvest do
-            local found = false
-            for _, obj in pairs(game:GetService("Workspace"):GetDescendants()) do
-               if not _G.AutoHarvest then break end
-               
-               -- Kiểm tra đúng vật phẩm Harvest
-               if obj:IsA("ProximityPrompt") and (obj.ObjectText == "Harvest" or obj.ActionText == "Harvest") then
-                  local parentPart = obj.Parent
-                  if parentPart and parentPart:IsA("BasePart") then
-                     found = true
-                     -- Dịch chuyển nhân vật đến vị trí Harvest
-                     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        player.Character.HumanoidRootPart.CFrame = parentPart.CFrame * CFrame.new(0, 2, 0)
-                     end
-                     
-                     -- Kích hoạt nút E ngay lập tức (Xóa bỏ delay nhấn giữ)
-                     fireproximityprompt(obj)
-                     task.wait() -- Delay cực nhỏ để đảm bảo nhận lệnh
-                  end
-               end
-            end
-            if not found then task.wait(0.1) end
-         end
-      end)
+      if Value then
+          -- 1. Xử lý Zoom Camera
+          Player.CameraMaxZoomDistance = 10000 
+          
+          -- 2. Xử lý Auto E (Spam)
+          task.spawn(function()
+              Rayfield:Notify({
+                 Title = "Đã kích hoạt",
+                 Content = "Đang chạy Auto E và Max Zoom.",
+                 Duration = 2,
+                 Image = 4483362458,
+              })
+              
+              while _G.AutoE do
+                  VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                  task.wait(0.05)
+                  VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                  task.wait(0.05)
+              end
+          end)
+      else
+          Player.CameraMaxZoomDistance = 20 -- Trả về mặc định khi tắt
+          
+          Rayfield:Notify({
+             Title = "Đã tắt",
+             Content = "Đã ngừng toàn bộ chức năng.",
+             Duration = 2,
+             Image = 4483362458,
+          })
+      end
    end,
 })
 
--- Tự động tải lại các thiết lập đã lưu từ trước
+-- Tự động tải lại trạng thái nút đã lưu từ trước
 Rayfield:LoadConfiguration()
