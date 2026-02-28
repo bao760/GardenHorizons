@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SCJ Horizons V2",
-   LoadingTitle = "Caricamento configurazione...",
+   Name = "SCJ Horizons V2.1",
+   LoadingTitle = "Đang tải cấu hình...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {
       Enabled = true,
@@ -12,37 +12,32 @@ local Window = Rayfield:CreateWindow({
    KeySystem = false, 
 })
 
--- Tab 1: Info
-local Tab1 = Window:CreateTab("Info", 4483362458)
-Tab1:CreateSection("Informazioni Script")
-Tab1:CreateLabel("Nome: SCJ Horizons V2.1")
-Tab1:CreateLabel("Range Harvest: 100")
-Tab1:CreateParagraph({Title = "Logica Auto E", Content = "Ora preme E solo se un prompt 'Harvest' è vicino a te."})
+-- Tab 1: Thông tin
+local Tab1 = Window:CreateTab("Thông tin", 4483362458)
+Tab1:CreateSection("Thông tin Script")
+Tab1:CreateLabel("Tên: SCJ Horizons V2.1")
+Tab1:CreateLabel("Tầm xa Harvest: 100")
+Tab1:CreateParagraph({Title = "Cơ chế thông minh", Content = "Script chỉ nhấn E khi phát hiện vật phẩm Harvest trong phạm vi 100 stud."})
 
--- Tab 2: Main Functions
-local Tab2 = Window:CreateTab("Main", 4483362458)
+-- Tab 2: Chức năng
+local Tab2 = Window:CreateTab("Chức năng", 4483362458)
 
 local _G = { MainEnabled = false }
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local Player = game:GetService("Players").LocalPlayer
 
--- Funzione per gestire il Range e l'Auto E intelligente
-local function UpdateHarvestLogic(enable)
+-- Hàm quét và Buff Range cho các vật phẩm "Harvest"
+local function UpdateHarvestRange(enable)
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then
-            -- Controlla se il prompt è per il raccolto (Harvest)
             if v.ObjectText:find("Harvest") or v.ActionText:find("Harvest") then
-                if enable then
-                    v.MaxActivationDistance = 100 -- Set range a 100
-                else
-                    v.MaxActivationDistance = 5 -- Reset a default
-                end
+                v.MaxActivationDistance = enable and 100 or 5
             end
         end
     end
 end
 
-Tab2:CreateSection("Funzioni Principali")
+Tab2:CreateSection("Farm thông minh")
 
 Tab2:CreateToggle({
    Name = "Auto Harvest (Range 100 + Smart E)",
@@ -52,55 +47,56 @@ Tab2:CreateToggle({
       _G.MainEnabled = Value
       
       if Value then
-          -- 1. Max Zoom Out
+          -- 1. Kéo Camera ra xa nhất
           Player.CameraMaxZoomDistance = 10000 
           
-          -- 2. Applica Range 100
-          UpdateHarvestLogic(true)
+          -- 2. Kích hoạt Buff Range 100
+          UpdateHarvestRange(true)
           
           Rayfield:Notify({
-             Title = "Attivato",
-             Content = "Range impostato a 100. Auto E attivo solo su Harvest.",
+             Title = "Đã kích hoạt",
+             Content = "Đã buff Range 100 và bật Auto E thông minh.",
              Duration = 2,
              Image = 4483362458,
           })
           
-          -- 3. Loop Smart Auto E
+          -- 3. Vòng lặp kiểm tra và nhấn E
           task.spawn(function()
               while _G.MainEnabled do
-                  local foundHarvest = false
-                  -- Controlla se c'è un prompt Harvest attivo vicino al giocatore
+                  local canHarvest = false
+                  
+                  -- Kiểm tra xem có Prompt Harvest nào đang hiện và ở gần không
                   for _, prompt in pairs(workspace:GetDescendants()) do
                       if prompt:IsA("ProximityPrompt") and (prompt.ObjectText:find("Harvest") or prompt.ActionText:find("Harvest")) then
-                          -- Se il prompt è utilizzabile (distanza corretta)
-                          if prompt.Enabled and (Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")) then
+                          if prompt.Enabled and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+                              -- Tính khoảng cách giữa người chơi và vật phẩm
                               local dist = (Player.Character.HumanoidRootPart.Position - prompt.Parent:GetModelCFrame().Position).Magnitude
-                              if dist <= prompt.MaxActivationDistance then
-                                  foundHarvest = true
+                              if dist <= 100 then
+                                  canHarvest = true
                                   break
                               end
                           end
                       end
                   end
 
-                  -- Premi E solo se ha trovato qualcosa da raccogliere
-                  if foundHarvest then
+                  -- Chỉ nhấn E nếu tìm thấy mục tiêu
+                  if canHarvest then
                       VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                       task.wait(0.05)
                       VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                   end
                   
-                  task.wait(0.1) -- Attesa minima tra i controlli
+                  task.wait(0.05) -- Nghỉ ngắn để tránh lag
               end
           end)
       else
-          -- Reset quando disattivato
+          -- Reset khi tắt Toggle
           Player.CameraMaxZoomDistance = 20
-          UpdateHarvestLogic(false)
+          UpdateHarvestRange(false)
           
           Rayfield:Notify({
-             Title = "Disattivato",
-             Content = "Ripristino impostazioni originali.",
+             Title = "Đã tắt",
+             Content = "Đã reset camera và tầm xa mặc định.",
              Duration = 2,
              Image = 4483362458,
           })
@@ -108,5 +104,5 @@ Tab2:CreateToggle({
    end,
 })
 
--- Caricamento automatico
+-- Tự động tải lại cấu hình cũ
 Rayfield:LoadConfiguration()
