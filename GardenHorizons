@@ -1,8 +1,8 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SCJ Horizons V2.1",
-   LoadingTitle = "Đang tự động tải cài đặt...",
+   Name = "SCJ Horizons V2",
+   LoadingTitle = "Caricamento configurazione...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {
       Enabled = true,
@@ -14,53 +14,93 @@ local Window = Rayfield:CreateWindow({
 
 -- Tab 1: Info
 local Tab1 = Window:CreateTab("Info", 4483362458)
-Tab1:CreateSection("Thông tin Script")
-Tab1:CreateLabel("Tên: SCJ Horizons V2.1")
-Tab1:CreateLabel("Phiên bản: 2.1")
-Tab1:CreateParagraph({Title = "Trạng thái", Content = "Script sẽ tự động ghi nhớ và tải lại các thiết lập của bạn."})
+Tab1:CreateSection("Informazioni Script")
+Tab1:CreateLabel("Nome: SCJ Horizons V2.1")
+Tab1:CreateLabel("Range Harvest: 100")
+Tab1:CreateParagraph({Title = "Logica Auto E", Content = "Ora preme E solo se un prompt 'Harvest' è vicino a te."})
 
 -- Tab 2: Main Functions
 local Tab2 = Window:CreateTab("Main", 4483362458)
 
-local _G = { AutoE = false }
+local _G = { MainEnabled = false }
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local Player = game:GetService("Players").LocalPlayer
 
-Tab2:CreateSection("Chức năng chính")
+-- Funzione per gestire il Range e l'Auto E intelligente
+local function UpdateHarvestLogic(enable)
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            -- Controlla se il prompt è per il raccolto (Harvest)
+            if v.ObjectText:find("Harvest") or v.ActionText:find("Harvest") then
+                if enable then
+                    v.MaxActivationDistance = 100 -- Set range a 100
+                else
+                    v.MaxActivationDistance = 5 -- Reset a default
+                end
+            end
+        end
+    end
+end
+
+Tab2:CreateSection("Funzioni Principali")
 
 Tab2:CreateToggle({
-   Name = "Auto E & Max Zoom Out",
+   Name = "Auto Harvest (Range 100 + Smart E)",
    CurrentValue = false,
    Flag = "MainToggle_Config", 
    Callback = function(Value)
-      _G.AutoE = Value
+      _G.MainEnabled = Value
       
       if Value then
-          -- 1. Xử lý Zoom Camera
+          -- 1. Max Zoom Out
           Player.CameraMaxZoomDistance = 10000 
           
-          -- 2. Xử lý Auto E (Spam)
+          -- 2. Applica Range 100
+          UpdateHarvestLogic(true)
+          
+          Rayfield:Notify({
+             Title = "Attivato",
+             Content = "Range impostato a 100. Auto E attivo solo su Harvest.",
+             Duration = 2,
+             Image = 4483362458,
+          })
+          
+          -- 3. Loop Smart Auto E
           task.spawn(function()
-              Rayfield:Notify({
-                 Title = "Đã kích hoạt",
-                 Content = "Đang chạy Auto E và Max Zoom.",
-                 Duration = 2,
-                 Image = 4483362458,
-              })
-              
-              while _G.AutoE do
-                  VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                  task.wait(0.05)
-                  VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                  task.wait(0.05)
+              while _G.MainEnabled do
+                  local foundHarvest = false
+                  -- Controlla se c'è un prompt Harvest attivo vicino al giocatore
+                  for _, prompt in pairs(workspace:GetDescendants()) do
+                      if prompt:IsA("ProximityPrompt") and (prompt.ObjectText:find("Harvest") or prompt.ActionText:find("Harvest")) then
+                          -- Se il prompt è utilizzabile (distanza corretta)
+                          if prompt.Enabled and (Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")) then
+                              local dist = (Player.Character.HumanoidRootPart.Position - prompt.Parent:GetModelCFrame().Position).Magnitude
+                              if dist <= prompt.MaxActivationDistance then
+                                  foundHarvest = true
+                                  break
+                              end
+                          end
+                      end
+                  end
+
+                  -- Premi E solo se ha trovato qualcosa da raccogliere
+                  if foundHarvest then
+                      VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                      task.wait(0.05)
+                      VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                  end
+                  
+                  task.wait(0.1) -- Attesa minima tra i controlli
               end
           end)
       else
-          Player.CameraMaxZoomDistance = 20 -- Trả về mặc định khi tắt
+          -- Reset quando disattivato
+          Player.CameraMaxZoomDistance = 20
+          UpdateHarvestLogic(false)
           
           Rayfield:Notify({
-             Title = "Đã tắt",
-             Content = "Đã ngừng toàn bộ chức năng.",
+             Title = "Disattivato",
+             Content = "Ripristino impostazioni originali.",
              Duration = 2,
              Image = 4483362458,
           })
@@ -68,5 +108,5 @@ Tab2:CreateToggle({
    end,
 })
 
--- Tự động tải lại trạng thái nút đã lưu từ trước
+-- Caricamento automatico
 Rayfield:LoadConfiguration()
