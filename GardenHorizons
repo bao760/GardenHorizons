@@ -2,7 +2,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
    Name = "SCJ Horizons V2.1",
-   LoadingTitle = "Đang tải cấu hình...",
+   LoadingTitle = "Đang kiểm tra mục tiêu...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {
       Enabled = true,
@@ -14,10 +14,9 @@ local Window = Rayfield:CreateWindow({
 
 -- Tab 1: Thông tin
 local Tab1 = Window:CreateTab("Thông tin", 4483362458)
-Tab1:CreateSection("Thông tin Script")
-Tab1:CreateLabel("Tên: SCJ Horizons V2.1")
-Tab1:CreateLabel("Tầm xa Harvest: 100")
-Tab1:CreateParagraph({Title = "Cơ chế thông minh", Content = "Script chỉ nhấn E khi phát hiện vật phẩm Harvest trong phạm vi 100 stud."})
+Tab1:CreateSection("Cấu hình lọc mục tiêu")
+Tab1:CreateLabel("Trạng thái: Đang lọc Cabbage")
+Tab1:CreateParagraph({Title = "Quy tắc nhấn E", Content = "Dòng chữ phải có 'Harvest' và tuyệt đối KHÔNG có 'Cabbage' mới tự động nhấn."})
 
 -- Tab 2: Chức năng
 local Tab2 = Window:CreateTab("Chức năng", 4483362458)
@@ -26,77 +25,79 @@ local _G = { MainEnabled = false }
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local Player = game:GetService("Players").LocalPlayer
 
--- Hàm quét và Buff Range cho các vật phẩm "Harvest"
+-- Hàm quét và điều chỉnh Range
 local function UpdateHarvestRange(enable)
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("ProximityPrompt") then
-            if v.ObjectText:find("Harvest") or v.ActionText:find("Harvest") then
+            -- Nếu có chữ Harvest nhưng KHÔNG có chữ Cabbage thì mới buff range
+            local text = (v.ObjectText .. v.ActionText):lower()
+            if text:find("harvest") and not text:find("cabbage") then
                 v.MaxActivationDistance = enable and 100 or 5
             end
         end
     end
 end
 
-Tab2:CreateSection("Farm thông minh")
+Tab2:CreateSection("Farm thông minh (Lọc Bắp Cải)")
 
 Tab2:CreateToggle({
-   Name = "Auto Harvest (Range 100 + Smart E)",
+   Name = "Auto Harvest (Bỏ qua Cabbage)",
    CurrentValue = false,
    Flag = "MainToggle_Config", 
    Callback = function(Value)
       _G.MainEnabled = Value
       
       if Value then
-          -- 1. Kéo Camera ra xa nhất
           Player.CameraMaxZoomDistance = 10000 
-          
-          -- 2. Kích hoạt Buff Range 100
           UpdateHarvestRange(true)
           
           Rayfield:Notify({
              Title = "Đã kích hoạt",
-             Content = "Đã buff Range 100 và bật Auto E thông minh.",
+             Content = "Đang farm mọi thứ trừ Cabbage!",
              Duration = 2,
              Image = 4483362458,
           })
           
-          -- 3. Vòng lặp kiểm tra và nhấn E
           task.spawn(function()
               while _G.MainEnabled do
-                  local canHarvest = false
+                  local targetFound = false
                   
-                  -- Kiểm tra xem có Prompt Harvest nào đang hiện và ở gần không
                   for _, prompt in pairs(workspace:GetDescendants()) do
-                      if prompt:IsA("ProximityPrompt") and (prompt.ObjectText:find("Harvest") or prompt.ActionText:find("Harvest")) then
-                          if prompt.Enabled and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-                              -- Tính khoảng cách giữa người chơi và vật phẩm
-                              local dist = (Player.Character.HumanoidRootPart.Position - prompt.Parent:GetModelCFrame().Position).Magnitude
-                              if dist <= 100 then
-                                  canHarvest = true
-                                  break
+                      if prompt:IsA("ProximityPrompt") then
+                          local objText = prompt.ObjectText:lower()
+                          local actText = prompt.ActionText:lower()
+                          
+                          -- ĐIỀU KIỆN: Có 'harvest' VÀ KHÔNG có 'cabbage'
+                          if (objText:find("harvest") or actText:find("harvest")) and 
+                             not (objText:find("cabbage") or actText:find("cabbage")) then
+                              
+                              if prompt.Enabled and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+                                  local dist = (Player.Character.HumanoidRootPart.Position - prompt.Parent:GetModelCFrame().Position).Magnitude
+                                  if dist <= 100 then
+                                      targetFound = true
+                                      break
+                                  end
                               end
                           end
                       end
                   end
 
-                  -- Chỉ nhấn E nếu tìm thấy mục tiêu
-                  if canHarvest then
+                  if targetFound then
                       VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                       task.wait(0.05)
                       VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                   end
                   
-                  task.wait(0.05) -- Nghỉ ngắn để tránh lag
+                  task.wait(0.1)
               end
           end)
       else
-          -- Reset khi tắt Toggle
           Player.CameraMaxZoomDistance = 20
           UpdateHarvestRange(false)
           
           Rayfield:Notify({
              Title = "Đã tắt",
-             Content = "Đã reset camera và tầm xa mặc định.",
+             Content = "Đã ngừng farm.",
              Duration = 2,
              Image = 4483362458,
           })
@@ -104,5 +105,4 @@ Tab2:CreateToggle({
    end,
 })
 
--- Tự động tải lại cấu hình cũ
 Rayfield:LoadConfiguration()
