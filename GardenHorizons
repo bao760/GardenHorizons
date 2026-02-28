@@ -1,8 +1,9 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Sử dụng link thư viện chính thức và ổn định nhất
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SCJ Horizons V2.1",
-   LoadingTitle = "Đang kiểm tra mục tiêu...",
+   Name = "SCJ Horizons",
+   LoadingTitle = "Đang khởi tạo hệ thống...",
    LoadingSubtitle = "by Gemini",
    ConfigurationSaving = {
       Enabled = true,
@@ -15,8 +16,8 @@ local Window = Rayfield:CreateWindow({
 -- Tab 1: Thông tin
 local Tab1 = Window:CreateTab("Thông tin", 4483362458)
 Tab1:CreateSection("Cấu hình lọc mục tiêu")
-Tab1:CreateLabel("Trạng thái: Đang lọc Cabbage")
-Tab1:CreateParagraph({Title = "Quy tắc nhấn E", Content = "Dòng chữ phải có 'Harvest' và tuyệt đối KHÔNG có 'Cabbage' mới tự động nhấn."})
+Tab1:CreateLabel("Script: Đã sửa lỗi Load")
+Tab1:CreateLabel("Mục tiêu: Harvest (Bỏ qua Cabbage)")
 
 -- Tab 2: Chức năng
 local Tab2 = Window:CreateTab("Chức năng", 4483362458)
@@ -27,50 +28,44 @@ local Player = game:GetService("Players").LocalPlayer
 
 -- Hàm quét và điều chỉnh Range
 local function UpdateHarvestRange(enable)
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("ProximityPrompt") then
-            -- Nếu có chữ Harvest nhưng KHÔNG có chữ Cabbage thì mới buff range
-            local text = (v.ObjectText .. v.ActionText):lower()
-            if text:find("harvest") and not text:find("cabbage") then
-                v.MaxActivationDistance = enable and 100 or 5
+    pcall(function() -- Sử dụng pcall để tránh lỗi vặt khi quét vật thể
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("ProximityPrompt") then
+                local objText = v.ObjectText:lower()
+                local actText = v.ActionText:lower()
+                local fullText = objText .. actText
+                
+                if fullText:find("harvest") and not fullText:find("cabbage") then
+                    v.MaxActivationDistance = enable and 100 or 5
+                end
             end
         end
-    end
+    end)
 end
 
-Tab2:CreateSection("Farm thông minh (Lọc Bắp Cải)")
+Tab2:CreateSection("Farm thông minh (Range 100)")
 
 Tab2:CreateToggle({
-   Name = "Auto Harvest (Bỏ qua Cabbage)",
+   Name = "Auto Harvest (Lọc Bắp Cải)",
    CurrentValue = false,
    Flag = "MainToggle_Config", 
    Callback = function(Value)
       _G.MainEnabled = Value
       
       if Value then
-          Player.CameraMaxZoomDistance = 10000 
+          if Player then Player.CameraMaxZoomDistance = 10000 end
           UpdateHarvestRange(true)
-          
-          Rayfield:Notify({
-             Title = "Đã kích hoạt",
-             Content = "Đang farm mọi thứ trừ Cabbage!",
-             Duration = 2,
-             Image = 4483362458,
-          })
           
           task.spawn(function()
               while _G.MainEnabled do
                   local targetFound = false
                   
+                  -- Tìm mục tiêu thỏa mãn điều kiện
                   for _, prompt in pairs(workspace:GetDescendants()) do
                       if prompt:IsA("ProximityPrompt") then
-                          local objText = prompt.ObjectText:lower()
-                          local actText = prompt.ActionText:lower()
+                          local fullText = (prompt.ObjectText .. prompt.ActionText):lower()
                           
-                          -- ĐIỀU KIỆN: Có 'harvest' VÀ KHÔNG có 'cabbage'
-                          if (objText:find("harvest") or actText:find("harvest")) and 
-                             not (objText:find("cabbage") or actText:find("cabbage")) then
-                              
+                          if fullText:find("harvest") and not fullText:find("cabbage") then
                               if prompt.Enabled and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
                                   local dist = (Player.Character.HumanoidRootPart.Position - prompt.Parent:GetModelCFrame().Position).Magnitude
                                   if dist <= 100 then
@@ -92,17 +87,11 @@ Tab2:CreateToggle({
               end
           end)
       else
-          Player.CameraMaxZoomDistance = 20
+          if Player then Player.CameraMaxZoomDistance = 20 end
           UpdateHarvestRange(false)
-          
-          Rayfield:Notify({
-             Title = "Đã tắt",
-             Content = "Đã ngừng farm.",
-             Duration = 2,
-             Image = 4483362458,
-          })
       end
    end,
 })
 
+-- Tự động tải cấu hình
 Rayfield:LoadConfiguration()
