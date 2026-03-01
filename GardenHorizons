@@ -1,97 +1,377 @@
--- Sử dụng link thư viện chính thức và ổn định nhất
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Rayfield/main/source'))()
-
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
-   Name = "SCJ Horizons",
-   LoadingTitle = "Đang khởi tạo hệ thống...",
-   LoadingSubtitle = "by Gemini",
+   Name = "SCJ Horizons V2.4",
+   LoadingTitle = "Đang tải cấu hình IJC_01...",
+   LoadingSubtitle = "by God IJC",
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = "SCJ_Horizons_Configs", 
-      FileName = "MainConfig"
+      FolderName = "IJC_01",          -- Tên folder riêng biệt
+      FileName = "IJC_01_Config"      -- Tên file config
    },
-   KeySystem = false, 
+   KeySystem = false,
 })
 
--- Tab 1: Thông tin
-local Tab1 = Window:CreateTab("Thông tin", 4483362458)
-Tab1:CreateSection("Cấu hình lọc mục tiêu")
-Tab1:CreateLabel("Script: Đã sửa lỗi Load")
-Tab1:CreateLabel("Mục tiêu: Harvest (Bỏ qua Cabbage)")
+-- Load config và thông báo kết quả
+Rayfield:LoadConfiguration()
 
--- Tab 2: Chức năng
-local Tab2 = Window:CreateTab("Chức năng", 4483362458)
+task.delay(1.5, function()
+   if Rayfield.CurrentConfiguration and next(Rayfield.CurrentConfiguration) ~= nil then
+      Rayfield:Notify({
+         Title = "✅ Config IJC_01 Loaded",
+         Content = "Đã load menu cũ thành công! Toggle trước đó được giữ nguyên.",
+         Duration = 5,
+         Image = 4483362458
+      })
+   else
+      Rayfield:Notify({
+         Title = "⚠️ Config IJC_01 Mới",
+         Content = "Không tìm thấy config cũ → tạo mới.\nChỉnh toggle xong thì script sẽ tự lưu.",
+         Duration = 6
+      })
+   end
+end)
 
-local _G = { MainEnabled = false }
+local _G = {
+    MainEnabled = false,
+    AutoSellActive = false,
+    InventoryLimit = 299,
+    AutoBuySeed = {},
+    GardenCFrame = nil,
+    LastInventoryCount = 0,
+    BuyLoopActive = {}
+}
+
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local Player = game:GetService("Players").LocalPlayer
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Hàm quét và điều chỉnh Range
-local function UpdateHarvestRange(enable)
-    pcall(function() -- Sử dụng pcall để tránh lỗi vặt khi quét vật thể
-        for _, v in pairs(workspace:GetDescendants()) do
-            if v:IsA("ProximityPrompt") then
-                local objText = v.ObjectText:lower()
-                local actText = v.ActionText:lower()
-                local fullText = objText .. actText
-                
-                if fullText:find("harvest") and not fullText:find("cabbage") then
-                    v.MaxActivationDistance = enable and 100 or 5
+local Player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Remote events
+local RemoteEventsFolder = ReplicatedStorage:WaitForChild("RemoteEvents")
+local PurchaseShopItem = RemoteEventsFolder:WaitForChild("PurchaseShopItem")
+local GetShopData    = RemoteEventsFolder:WaitForChild("GetShopData")
+local SellItems      = RemoteEventsFolder:WaitForChild("SellItems")
+
+-- Vị trí cố định
+local SHOP_POSITION = CFrame.new(176.70369, 201.054993, 672)
+local SELL_POSITION = CFrame.new(149.3974, 201.054993, 671.999878)
+
+-- ==========================================
+-- ĐẾM INVENTORY
+-- ==========================================
+local function GetRealInventoryCount()
+    local total = 0
+    pcall(function()
+        if Player.Backpack then
+            for _, item in ipairs(Player.Backpack:GetChildren()) do
+                local amt = item:FindFirstChild("Amount") or item:FindFirstChild("Quantity") or item:FindFirstChild("Value")
+                total += (amt and amt.Value or 1)
+            end
+        end
+
+        if Player.Character then
+            for _, item in ipairs(Player.Character:GetChildren()) do
+                if item:IsA("Tool") then
+                    local amt = item:FindFirstChild("Amount") or item:FindFirstChild("Quantity")
+                    total += (amt and amt.Value or 1)
+                end
+            end
+        end
+
+        local gui = Player:FindFirstChild("PlayerGui")
+        if gui then
+            local hud = gui:FindFirstChild("Hud_UI")
+            if hud then
+                local side = hud:FindFirstChild("SideButtons")
+                if side then
+                    local seedsUI = side:FindFirstChild("Seeds")
+                    if seedsUI then
+                        local amt = seedsUI:FindFirstChild("Amount")
+                        if amt and amt.Text then
+                            local num = amt.Text:match("%d+")
+                            if num then total = tonumber(num) or total end
+                        end
+                    end
                 end
             end
         end
     end)
+    _G.LastInventoryCount = total
+    return total
 end
 
-Tab2:CreateSection("Farm thông minh (Range 100)")
+-- ==========================================
+-- LẤY DỮ LIỆU SHOP
+-- ==========================================
+local function GetShopDataRemote()
+    local success, data = pcall(function()
+        return GetShopData:InvokeServer("SeedShop")
+    end)
+    return success and data or nil
+end
 
-Tab2:CreateToggle({
-   Name = "Auto Harvest (Lọc Bắp Cải)",
+local function GetSeedStock(seedName)
+    local data = GetShopDataRemote()
+    if data and data.Items and data.Items[seedName] then
+        return data.Items[seedName].Amount or 0
+    end
+    return 0
+end
+
+-- ==========================================
+-- MUA & BÁN
+-- ==========================================
+local function BuySeed(seedName)
+    local success = pcall(function()
+        PurchaseShopItem:InvokeServer("SeedShop", seedName)
+    end)
+    return success
+end
+
+local function SellAll()
+    local success = pcall(function()
+        SellItems:InvokeServer("SellAll")
+    end)
+    return success
+end
+
+-- ==========================================
+-- TELEPORT NHANH
+-- ==========================================
+local function InstantTeleport(targetCFrame)
+    local char = Player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return false end
+    local hrp = char.HumanoidRootPart
+    hrp.CFrame = targetCFrame + Vector3.new(0, 3, 0)
+    hrp.Velocity = Vector3.new()
+    return true
+end
+
+-- ==========================================
+-- CONTINUOUS BUY LOOP
+-- ==========================================
+local function ContinuousBuyLoop(seedKey, seedName)
+    _G.BuyLoopActive[seedKey] = true
+    
+    task.spawn(function()
+        while _G.AutoBuySeed[seedKey] do
+            local stock = GetSeedStock(seedName)
+            if stock <= 0 then
+                task.wait(4 + math.random(3,8))
+                continue
+            end
+            
+            InstantTeleport(SHOP_POSITION)
+            task.wait(0.6 + math.random(0,4)/10)
+            
+            local bought = 0
+            local SAFETY_THRESHOLD = 15
+            
+            while _G.AutoBuySeed[seedKey] do
+                local inv = GetRealInventoryCount()
+                if inv >= (_G.InventoryLimit - SAFETY_THRESHOLD) then break end
+                
+                local curStock = GetSeedStock(seedName)
+                if curStock <= 0 then break end
+                
+                if BuySeed(seedName) then
+                    bought = bought + 1
+                    task.wait(0.12 + math.random(0,10)/100)
+                else
+                    task.wait(0.9)
+                end
+            end
+            
+            InstantTeleport(_G.GardenCFrame)
+            task.wait(2.2 + math.random(0,5)/10)
+        end
+        
+        _G.BuyLoopActive[seedKey] = nil
+    end)
+end
+
+-- ==========================================
+-- TAB MAIN
+-- ==========================================
+local TabMain = Window:CreateTab("Main Farm", 4483362458)
+
+TabMain:CreateButton({
+   Name = "📍 LƯU VỊ TRÍ VƯỜN (BẮT BUỘC)",
+   Callback = function()
+       if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+           _G.GardenCFrame = Player.Character.HumanoidRootPart.CFrame
+           Rayfield:Notify({Title = "✅ OK", Content = "Coming soon Auto Get Garden", Duration = 3})
+       end
+   end,
+})
+
+TabMain:CreateToggle({
+   Name = "🌾 Auto Farm (Harvest)",
    CurrentValue = false,
-   Flag = "MainToggle_Config", 
    Callback = function(Value)
       _G.MainEnabled = Value
-      
       if Value then
-          if Player then Player.CameraMaxZoomDistance = 10000 end
-          UpdateHarvestRange(true)
+          task.spawn(function()
+              while _G.MainEnabled do
+                  pcall(function()
+                      local hrp = Player.Character and Player.Character.HumanoidRootPart
+                      if hrp then
+                          Camera.CameraType = Enum.CameraType.Scriptable
+                          Camera.CFrame = CFrame.new(hrp.Position + Vector3.new(0,100,0), hrp.Position)
+                      end
+                  end)
+                  task.wait()
+              end
+              Camera.CameraType = Enum.CameraType.Custom
+          end)
           
           task.spawn(function()
               while _G.MainEnabled do
-                  local targetFound = false
-                  
-                  -- Tìm mục tiêu thỏa mãn điều kiện
-                  for _, prompt in pairs(workspace:GetDescendants()) do
-                      if prompt:IsA("ProximityPrompt") then
-                          local fullText = (prompt.ObjectText .. prompt.ActionText):lower()
-                          
-                          if fullText:find("harvest") and not fullText:find("cabbage") then
-                              if prompt.Enabled and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-                                  local dist = (Player.Character.HumanoidRootPart.Position - prompt.Parent:GetModelCFrame().Position).Magnitude
-                                  if dist <= 100 then
-                                      targetFound = true
-                                      break
+                  pcall(function()
+                      for _, v in pairs(workspace:GetDescendants()) do
+                          if v:IsA("ProximityPrompt") then
+                              local txt = (v.ObjectText .. v.ActionText):lower()
+                              if txt:find("harvest") then
+                                  v.HoldDuration = 0
+                                  v.MaxActivationDistance = 120
+                                  if v.Enabled then
+                                      VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                      task.wait(0.04)
+                                      VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
                                   end
                               end
                           end
                       end
-                  end
-
-                  if targetFound then
-                      VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                      task.wait(0.05)
-                      VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                  end
-                  
-                  task.wait(0.1)
+                  end)
+                  task.wait(0.14)
               end
           end)
       else
-          if Player then Player.CameraMaxZoomDistance = 20 end
-          UpdateHarvestRange(false)
+          Camera.CameraType = Enum.CameraType.Custom
       end
    end,
 })
 
--- Tự động tải cấu hình
-Rayfield:LoadConfiguration()
+TabMain:CreateToggle({
+   Name = "💰 Auto Sell (TP đến chỗ bán khi đủ)",
+   CurrentValue = false,
+   Callback = function(Value)
+      _G.AutoSellActive = Value
+      if Value and not _G.GardenCFrame then
+         Rayfield:Notify({Title="Lỗi", Content="Chưa lưu vị trí vườn!", Duration=4})
+         _G.AutoSellActive = false
+         return
+      end
+      
+      if Value then
+         task.spawn(function()
+            while _G.AutoSellActive do
+               local count = GetRealInventoryCount()
+               if count >= _G.InventoryLimit then
+                  InstantTeleport(SELL_POSITION)
+                  task.wait(0.8)
+                  SellAll()
+                  task.wait(0.6)
+                  InstantTeleport(_G.GardenCFrame)
+                  task.wait(2.5)
+               end
+               task.wait(2)
+            end
+         end)
+      end
+   end,
+})
+
+-- ==========================================
+-- TAB SHOP SEED
+-- ==========================================
+local TabShop = Window:CreateTab("Shop Seed", 4483362458)
+
+local seedList = {
+    "Carrot Seed", "Corn Seed", "Onion Seed", "Strawberry Seed", "Mushroom Seed",
+    "Beetroot Seed", "Tomato Seed", "Apple Seed", "Rose Seed", "Wheat Seed",
+    "Banana Seed", "Plum Seed", "Potato Seed", "Cabbage Seed", "Cherry Seed"
+}
+
+for _, seedName in ipairs(seedList) do
+    local key = seedName:gsub(" Seed", "")
+    TabShop:CreateToggle({
+        Name = "🔥 CONTINUOUS BUY " .. seedName,
+        CurrentValue = false,
+        Callback = function(Value)
+            _G.AutoBuySeed[key] = Value
+            if Value then
+                if not _G.GardenCFrame then
+                    Rayfield:Notify({Title="Cảnh báo", Content="Chưa lưu vị trí vườn!", Duration=4})
+                    _G.AutoBuySeed[key] = false
+                    return
+                end
+                ContinuousBuyLoop(key, seedName)
+            else
+                Rayfield:Notify({Title="DỪNG", Content=seedName, Duration=2})
+            end
+        end,
+    })
+end
+
+-- ==========================================
+-- TAB DEBUG & STOCK
+-- ==========================================
+local TabDebug = Window:CreateTab("Debug & Stock", 4483362458)
+
+TabDebug:CreateButton({
+    Name = "📦 CHECK STOCK TẤT CẢ SEED (Console)",
+    Callback = function()
+        local data = GetShopDataRemote()
+        if data and data.Items then
+            print("===== TỒN KHO SHOP - " .. os.date("%H:%M:%S") .. " =====")
+            print(string.format("%-28s | %-10s | %-8s", "Tên Seed", "Số Lượng", "Còn Hàng?"))
+            print("------------------------------------------------------------")
+            
+            for name, info in pairs(data.Items) do
+                local amount = info.Amount or 0
+                local status = (amount > 0) and "CÓ" or "HẾT"
+                print(string.format("%-28s | %10d | %-8s", name, amount, status))
+            end
+            
+            print("============================================================")
+            Rayfield:Notify({
+                Title = "✅ CHECK STOCK HOÀN TẤT",
+                Content = "Đã in toàn bộ seed + số lượng ra console (F9)",
+                Duration = 5
+            })
+        else
+            Rayfield:Notify({
+                Title = "Lỗi",
+                Content = "Không lấy được dữ liệu shop.",
+                Duration = 5
+            })
+        end
+    end
+})
+
+TabDebug:CreateButton({
+    Name = "🛑 DỪNG TẤT CẢ AUTO BUY",
+    Callback = function()
+        for k in pairs(_G.AutoBuySeed) do
+            _G.AutoBuySeed[k] = false
+        end
+        Rayfield:Notify({Title="ĐÃ DỪNG", Content="Tất cả continuous buy", Duration=3})
+    end
+})
+
+-- Thêm nút save thủ công nếu cần
+TabDebug:CreateButton({
+    Name = "💾 LƯU CONFIG IJC_01 NGAY",
+    Callback = function()
+        Rayfield:SaveConfiguration()
+        Rayfield:Notify({Title="Đã Lưu", Content="Config IJC_01 đã lưu thủ công", Duration=3})
+    end
+})
+
+print("SCJ Horizons V2.4 - Config IJC_01 Loaded")
+print("Menu sẽ tự lưu khi bạn chỉnh toggle. Chạy lại script để load lại.")
+
+Rayfield:LoadConfiguration()  -- Load lại lần nữa để chắc chắn
