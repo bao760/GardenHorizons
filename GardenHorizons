@@ -1,6 +1,3 @@
--- SCJ Horizons V2.5 | AFK GOD + CONTINUOUS BUY (UPDATE)
--- Fixed HttpGet typo + minor stability improvements
-
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name = "SCJ Horizons V2.5 | AFK GOD + CONTINUOUS BUY",
@@ -449,6 +446,3 @@ task.spawn(function()
         task.wait(0.13)
     end
 end)
-
-print("SCJ Horizons V2.5 đã chạy thành công!")
-print("Tab 'Shop Seed' có thêm Bamboo Seed & Mango Seed")
